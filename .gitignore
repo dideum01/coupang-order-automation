@@ -1,0 +1,35 @@
+# 🔐 인증 정보 (절대 푸시 금지)
+.env
+service-account.json
+*-credentials.json
+.last_ip
+
+# 📦 Python 빌드 산출물
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# 🛠️ PyInstaller
+build/
+dist/
+*.spec
+
+# 📊 사용자 데이터 (개인정보 보호)
+backups/
+orders/
+*.xlsx
+*.xls
+*.csv
+!sample_*.xlsx
+
+# 🖥️ IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# 예외: 예시 파일은 푸시 OK
+!.env.example
