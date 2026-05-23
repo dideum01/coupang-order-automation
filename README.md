@@ -4,9 +4,19 @@
 
 ## 설치
 
+### 방법 1) Windows 더블클릭 (다른 PC 에서 가장 쉬움) ⭐
+
+프로젝트 폴더의 `install.bat` 을 더블클릭하면 Python 의존성이 자동으로 설치됩니다.
+(Python 3.10 이상이 먼저 설치되어 있어야 합니다 — https://www.python.org/downloads/)
+
+### 방법 2) 직접 pip 실행
+
 ```powershell
 pip install -r requirements.txt
 ```
+
+> 💡 API 모드만 쓸 경우 pandas/openpyxl 없이도 프로그램이 시작됩니다.
+> 엑셀 파일을 다룰 때만 해당 패키지가 필요합니다.
 
 ## 환경 설정 (.env)
 

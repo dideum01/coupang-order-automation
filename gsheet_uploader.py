@@ -7,7 +7,8 @@ Google Sheets 업로더.
 Wing API 응답 → 구글시트 컬럼 매핑:
   구매날짜      ← orderedAt (YY.MM.DD 변환)
   상태          ← (비움)
-  이름          ← receiver.name
+  구매자        ← orderer.name
+  수취인        ← receiver.name
   전화번호      ← receiver.safeNumber
   주소          ← receiver.addr1 + " " + receiver.addr2
   배송메세지    ← parcelPrintMessage
@@ -32,11 +33,14 @@ from openpyxl import Workbook
 log = logging.getLogger(__name__)
 
 
-# 구글시트 컬럼 순서 (16개)
+# 구글시트 컬럼 순서 (17개)
+# A=구매날짜, B=상태, C=구매자, D=수취인, E=전화번호, F=주소, G=배송메세지,
+# H=상품명, I=구매수량, J=판매가격, K=매입가격, ..., Q=결제
 SHEET_COLUMNS = [
     "구매날짜",
     "상태",
-    "이름",
+    "구매자",
+    "수취인",
     "전화번호",
     "주소",
     "배송메세지",
@@ -98,10 +102,13 @@ def _safe_get(d: dict | None, *keys: str, default: str = "") -> str:
 def order_to_rows(order: dict[str, Any]) -> list[list[Any]]:
     """
     주문 1개 → 구글시트 행 리스트 (옵션이 여러 개면 행 분할).
-    각 행은 16개 컬럼 길이.
+    각 행은 17개 컬럼 길이.
+    컬럼 순서: A=구매날짜, B=상태, C=구매자, D=수취인, E=전화번호, F=주소,
+               G=배송메세지, H=상품명, I=구매수량, J=판매가격, K~Q=매입가격~결제
     """
     purchase_date = _parse_date(order.get("orderedAt"))
-    name = _safe_get(order, "receiver", "name")
+    buyer = _safe_get(order, "orderer", "name")          # 구매자 (C열)
+    name = _safe_get(order, "receiver", "name")          # 수취인 (D열)
     phone = _safe_get(order, "receiver", "safeNumber") or _safe_get(
         order, "receiver", "receiverNumber"
     )
@@ -119,24 +126,25 @@ def order_to_rows(order: dict[str, Any]) -> list[list[Any]]:
         qty = item.get("shippingCount", "")
         price = item.get("orderPrice", "")
 
-        # 16개 컬럼 — 채울 곳만 채우고 나머지는 빈 문자열
+        # 17개 컬럼 — 채울 곳만 채우고 나머지는 빈 문자열
         row = [
-            purchase_date,    # 구매날짜
-            "",               # 상태
-            name,             # 이름
-            phone,            # 전화번호
-            address,          # 주소
-            delivery_msg,     # 배송메세지
-            product_name,     # 상품명
-            qty,              # 구매수량
-            price,            # 판매가격
-            "",               # 매입가격
-            "",               # 수수료비율
-            "",               # 수수료
-            "",               # 판매마진
-            "",               # 마진율
-            "",               # 매입처
-            "",               # 결제
+            purchase_date,    # A: 구매날짜
+            "",               # B: 상태
+            buyer,            # C: 구매자
+            name,             # D: 수취인
+            phone,            # E: 전화번호
+            address,          # F: 주소
+            delivery_msg,     # G: 배송메세지
+            product_name,     # H: 상품명
+            qty,              # I: 구매수량
+            price,            # J: 판매가격
+            "",               # K: 매입가격
+            "",               # L: 수수료비율
+            "",               # M: 수수료
+            "",               # N: 판매마진
+            "",               # O: 마진율
+            "",               # P: 매입처
+            "",               # Q: 결제
         ]
         rows.append(row)
     return rows
@@ -261,10 +269,10 @@ def _get_or_create_monthly_worksheet(
 
     last_row = new_ws.row_count
     if last_row >= 3:
-        range_to_clear = f"A3:I{last_row}"
+        range_to_clear = f"A3:J{last_row}"
         new_ws.batch_clear([range_to_clear])
         log.info(
-            "🧹 새 탭 데이터 영역(A3:I%d) 비움 — 1~2행 헤더와 B열 드롭다운 서식 유지",
+            "🧹 새 탭 데이터 영역(A3:J%d) 비움 — 1~2행 헤더와 B열 드롭다운 서식 유지",
             last_row,
         )
 
@@ -365,15 +373,16 @@ def append_orders_to_sheet(
     # 채울 컬럼만 batch_update — 비워두는 컬럼(B, J~P)은 건드리지 않음 (기존 값/수식 유지)
     # all_rows 의 인덱스: A=0, B=1, C=2, D=3, E=4, F=5, G=6, H=7, I=8, J=9 ...
     col_a_values = [[r[0]] for r in all_rows]              # A열만
-    col_c_to_i_values = [r[2:9] for r in all_rows]          # C~I열 (이름, 전화번호, 주소, 배송메세지, 상품명, 구매수량, 판매가격)
+    # C열(구매자)~J열(판매가격): 인덱스 2~9 (10개 항목, 슬라이스 [2:10])
+    col_c_to_j_values = [r[2:10] for r in all_rows]
 
     batch_payload = [
         {"range": f"A{next_row}:A{last_row}", "values": col_a_values},
-        {"range": f"C{next_row}:I{last_row}", "values": col_c_to_i_values},
+        {"range": f"C{next_row}:J{last_row}", "values": col_c_to_j_values},
     ]
-    log.info("✏️  쓸 영역: A%d:A%d (구매날짜) + C%d:I%d (이름~판매가격)",
+    log.info("✏️  쓸 영역: A%d:A%d (구매날짜) + C%d:J%d (구매자~판매가격)",
              next_row, last_row, next_row, last_row)
-    log.info("   (B열 상태, J~P열 매입가격~결제 는 건드리지 않음)")
+    log.info("   (B열 상태, K~Q열 매입가격~결제 는 건드리지 않음)")
 
     if dry_run:
         log.info("[DRY-RUN] 시트 쓰기 건너뜀 (예정 %d행)", len(all_rows))

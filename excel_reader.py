@@ -17,7 +17,24 @@ import logging
 from pathlib import Path
 from typing import Any
 
-import pandas as pd
+# pandas 는 엑셀 기능 사용 시에만 필요 — lazy import 로 변경
+# (API 모드만 쓸 때는 pandas 미설치여도 프로그램이 시작되어야 함)
+try:
+    import pandas as pd  # type: ignore
+    _HAS_PANDAS = True
+except ImportError:
+    pd = None  # type: ignore
+    _HAS_PANDAS = False
+
+
+def _require_pandas() -> None:
+    if not _HAS_PANDAS:
+        raise RuntimeError(
+            "엑셀 기능을 사용하려면 pandas 와 openpyxl 이 필요합니다.\n"
+            "  설치:  pip install pandas openpyxl\n"
+            "  또는 프로젝트 폴더에서:  install.bat 더블클릭"
+        )
+
 
 log = logging.getLogger(__name__)
 
@@ -49,6 +66,11 @@ COLUMN_ALIASES: dict[str, str] = {
     "운송장번호": "invoiceNumber",
     "invoicenumber": "invoiceNumber",
     "invoice_number": "invoiceNumber",
+    # 구매자명 (쿠팡 발주서 엑셀 컬럼 → 내부 필드)
+    "구매자명": "buyerName",
+    "구매자": "buyerName",
+    "buyername": "buyerName",
+    "buyer_name": "buyerName",
     # 보조 필드
     "분할배송여부": "splitShipping",
     "splitshipping": "splitShipping",
@@ -61,7 +83,7 @@ def _normalize(name: str) -> str:
     return str(name).strip().lower().replace(" ", "").replace("-", "")
 
 
-def _rename_columns(df: pd.DataFrame) -> pd.DataFrame:
+def _rename_columns(df):
     rename: dict[str, str] = {}
     for col in df.columns:
         key = _normalize(col)
@@ -70,7 +92,8 @@ def _rename_columns(df: pd.DataFrame) -> pd.DataFrame:
     return df.rename(columns=rename)
 
 
-def _read_any(path: Path) -> pd.DataFrame:
+def _read_any(path: Path):
+    _require_pandas()
     suffix = path.suffix.lower()
     if suffix in {".xlsx", ".xls", ".xlsm"}:
         return pd.read_excel(path, dtype=str)
@@ -88,6 +111,7 @@ def _read_any(path: Path) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 def read_shipment_box_ids(path: str | Path) -> list[int]:
     """엑셀에서 묶음배송번호(shipmentBoxId) 목록만 추출."""
+    _require_pandas()
     p = Path(path)
     df = _rename_columns(_read_any(p))
     if "shipmentBoxId" not in df.columns:
@@ -121,6 +145,7 @@ REQUIRED_INVOICE_COLS = [
 
 def read_invoices(path: str | Path) -> list[dict[str, Any]]:
     """엑셀에서 송장 업로드용 데이터 추출 (API body 형식의 dict 리스트)."""
+    _require_pandas()
     p = Path(path)
     df = _rename_columns(_read_any(p))
 
